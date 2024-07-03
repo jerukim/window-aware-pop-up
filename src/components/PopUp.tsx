@@ -1,90 +1,88 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react'
+import { useCallback, useRef, useState } from 'react'
 import clsx from 'clsx'
 import { intersects } from '../lib/intersects'
 
 import type { Positions } from '../types'
+import { observe } from '../lib/observer'
 
 interface PopupProps extends IntersectionObserverInit {
   anchorPositions?: Positions
 }
 
+// TODO: reposition content along anchor to maximize scroll space before repositioning anchor
+// TODO: abstract root
+// TODO: abstract trigger
+// TODO: abstract portal
+// TODO: abstract content
+// TODO: abstract anchor
+
+// todo: address scenario where repositioning doesn't happen when threshold is already passed and observer isn't triggered (onScroll or add additional thresholds)
+
 export function Popup({
   root,
+  threshold = 1.0,
+  rootMargin,
   anchorPositions = ['bottom', 'top', 'right', 'left'],
 }: PopupProps) {
-  const containerRef = useRef<HTMLDivElement>(null)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const cleanupRef = useRef<() => void>()
 
   const [open, setOpen] = useState(false)
-  function toggleOpen() {
-    setOpen((open) => !open)
-  }
-
   const [anchorPosition, setAnchorPosition] = useState(
     anchorPositions[0]
   )
 
-  const observer = useMemo<IntersectionObserver>(() => {
-    return new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          const containerRect =
-            containerRef.current?.getBoundingClientRect()
+  const reposition = useCallback(
+    (entry: IntersectionObserverEntry) => {
+      const containerRect = rootRef.current?.getBoundingClientRect()
 
-          if (containerRect && entry.rootBounds) {
-            for (const anchorPosition of anchorPositions) {
-              if (
-                intersects(anchorPosition, {
-                  containerRect,
-                  contentRect: entry.boundingClientRect,
-                  windowRect: entry.rootBounds,
-                  offset: 16,
-                })
-              ) {
-                setAnchorPosition(anchorPosition)
-                break
-              }
-            }
+      if (containerRect && entry.rootBounds) {
+        for (const anchorPosition of anchorPositions) {
+          if (
+            intersects(anchorPosition, {
+              containerRect,
+              contentRect: entry.boundingClientRect,
+              windowRect: entry.rootBounds,
+              offset: 16,
+            })
+          ) {
+            setAnchorPosition(anchorPosition)
+            break
           }
-        })
-      },
-      {
-        root,
-        threshold: 1.0,
-      }
-    )
-  }, [root, anchorPosition, anchorPositions])
-
-  const contentRef = useCallback(
-    (node: HTMLDivElement) => {
-      if (node) {
-        observer.observe(node)
-      } else {
-        observer.disconnect()
+        }
       }
     },
-    [observer]
+    [anchorPositions, anchorPosition]
   )
 
-  useEffect(() => {
-    return () => observer.disconnect()
-  }, [observer])
+  const portalRef = useCallback(
+    (node: HTMLDivElement) => {
+      if (node) {
+        cleanupRef.current = observe(node, reposition, {
+          root,
+          rootMargin,
+          threshold,
+        })
+      } else {
+        cleanupRef?.current?.()
+      }
+    },
+    [reposition, root, rootMargin, threshold]
+  )
 
   return (
-    <div className="relative" ref={containerRef}>
+    // Root
+    <div className="relative" ref={rootRef}>
+      {/* Trigger */}
       <button
         className="bg-green-200 border border-green-500 p-4"
-        onClick={toggleOpen}
+        onClick={() => setOpen((open) => !open)}
       >
         hello world
       </button>
 
       {open && (
+        // Portal
         <div
           className={clsx(
             'absolute opacity-50 transition-transform',
@@ -97,10 +95,13 @@ export function Popup({
             anchorPosition === 'right' &&
               'top-1/2 left-full translate-x-4 -translate-y-1/2'
           )}
-          ref={contentRef}
+          ref={portalRef}
         >
           <div className="relative">
+            {/* Content */}
             <div className="size-64 bg-red-200 border border-red-500 grid grid-cols-2" />
+
+            {/* Anchor */}
             <div
               className={clsx(
                 'absolute bg-red-200 border border-red-500 size-4 rotate-45 -translate-x-1/2 -translate-y-1/2',
