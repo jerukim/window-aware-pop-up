@@ -41,7 +41,7 @@ function getPortalStyles(anchorPosition: Position, offset: number) {
       }
     case 'left':
       return {
-        top: '50%%',
+        top: '50%',
         left: `-${offset}px`,
         transform: `translate(-100%, -50%)`,
       }
