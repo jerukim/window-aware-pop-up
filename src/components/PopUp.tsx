@@ -7,6 +7,7 @@ import { observe } from '../lib/observer'
 
 interface PopupProps extends IntersectionObserverInit {
   anchorPositions?: Positions
+  offset?: number
 }
 
 // TODO: reposition content along anchor to maximize scroll space before repositioning anchor
@@ -21,16 +22,20 @@ interface PopupProps extends IntersectionObserverInit {
 export function Popup({
   root,
   threshold = 1.0,
-  rootMargin,
   anchorPositions = ['bottom', 'top', 'right', 'left'],
+  offset = 0,
 }: PopupProps) {
   const rootRef = useRef<HTMLDivElement>(null)
-  const cleanupRef = useRef<() => void>()
+  const unobserveRef = useRef<() => void>()
 
-  const [open, setOpen] = useState(false)
   const [anchorPosition, setAnchorPosition] = useState(
     anchorPositions[0]
   )
+  const [open, setOpen] = useState(false)
+
+  function toggleOpen() {
+    setOpen(!open)
+  }
 
   const reposition = useCallback(
     (entry: IntersectionObserverEntry) => {
@@ -43,7 +48,7 @@ export function Popup({
               containerRect,
               contentRect: entry.boundingClientRect,
               windowRect: entry.rootBounds,
-              offset: 16,
+              offset,
             })
           ) {
             setAnchorPosition(anchorPosition)
@@ -52,31 +57,30 @@ export function Popup({
         }
       }
     },
-    [anchorPositions, anchorPosition]
+    [anchorPositions, anchorPosition, offset]
   )
 
   const portalRef = useCallback(
     (node: HTMLDivElement) => {
       if (node) {
-        cleanupRef.current = observe(node, reposition, {
+        unobserveRef.current = observe(node, reposition, {
           root,
-          rootMargin,
           threshold,
         })
       } else {
-        cleanupRef?.current?.()
+        unobserveRef?.current?.()
       }
     },
-    [reposition, root, rootMargin, threshold]
+    [reposition, root, threshold]
   )
 
   return (
     // Root
-    <div className="relative" ref={rootRef}>
+    <div ref={rootRef} className="relative">
       {/* Trigger */}
       <button
         className="bg-green-200 border border-green-500 p-4"
-        onClick={() => setOpen((open) => !open)}
+        onClick={toggleOpen}
       >
         hello world
       </button>
@@ -84,18 +88,31 @@ export function Popup({
       {open && (
         // Portal
         <div
+          ref={portalRef}
           className={clsx(
             'absolute opacity-50 transition-transform',
-            anchorPosition === 'bottom' &&
-              'top-full left-1/2 -translate-x-1/2 translate-y-4 ',
+            anchorPosition === 'bottom' && `top-full left-1/2`,
             anchorPosition === 'left' &&
-              'top-1/2 -left-4 -translate-x-full -translate-y-1/2',
+              `top-1/2 -translate-x-full -translate-y-1/2`,
             anchorPosition === 'top' &&
-              '-top-4 left-1/2 -translate-x-1/2 -translate-y-full ',
+              `left-1/2 -translate-x-1/2 -translate-y-full`,
             anchorPosition === 'right' &&
-              'top-1/2 left-full translate-x-4 -translate-y-1/2'
+              `top-1/2 left-full translate-x-[${offset}px] -translate-y-1/2`
           )}
-          ref={portalRef}
+          style={{
+            ...(anchorPosition === 'bottom' && {
+              transform: `translate(-50%, ${offset}px)`,
+            }),
+            ...(anchorPosition === 'left' && {
+              left: `-${offset}px`,
+            }),
+            ...(anchorPosition === 'top' && {
+              top: `-${offset}px`,
+            }),
+            ...(anchorPosition === 'right' && {
+              transform: `translate(${offset}px, -50%)`,
+            }),
+          }}
         >
           <div className="relative">
             {/* Content */}
