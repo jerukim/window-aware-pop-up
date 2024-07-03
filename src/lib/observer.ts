@@ -9,6 +9,7 @@ const observerMap = new Map<
   {
     id: string
     observer: IntersectionObserver
+    elements: Map<Element, Array<ObserverInstanceCallback>>
   }
 >()
 
@@ -49,23 +50,30 @@ export function optionsToId(options: IntersectionObserverInit) {
     .toString()
 }
 
-function createObserver(
-  callback: ObserverInstanceCallback,
-  options: IntersectionObserverInit
-) {
+function createObserver(options: IntersectionObserverInit) {
   // Create a unique ID for this observer instance, based on the root, root margin and threshold.
   const id = optionsToId(options)
   let instance = observerMap.get(id)
 
   if (!instance) {
-    const observer = new IntersectionObserver(
-      (entries) => entries.forEach(callback),
-      options
-    )
+    // Create a map of elements this observer is going to observe. Each element has a list of callbacks that should be triggered, once it comes into view.
+    const elements = new Map<
+      Element,
+      Array<ObserverInstanceCallback>
+    >()
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        elements.get(entry.target)?.forEach((callback) => {
+          callback(entry)
+        })
+      })
+    }, options)
 
     instance = {
       id,
       observer,
+      elements,
     }
 
     observerMap.set(id, instance)
@@ -101,15 +109,29 @@ export function observe(
     return () => {} // Nothing to cleanup
   }
   // An observer with the same options can be reused, so lets use this fact
-  const { id, observer } = createObserver(callback, options)
+  const { id, observer, elements } = createObserver(options)
 
+  // Register the callback listener for this element
+  const callbacks = elements.get(element) || []
+  if (!elements.has(element)) {
+    elements.set(element, callbacks)
+  }
+
+  callbacks.push(callback)
   observer.observe(element)
 
   return function unobserve() {
-    observer.unobserve(element)
+    // Remove the callback from the callback list
+    callbacks.splice(callbacks.indexOf(callback), 1)
 
-    if (observer.takeRecords().length === 0) {
-      // No more elements are being observed by this instance, so destroy it
+    if (callbacks.length === 0) {
+      // No more callback exists for element, so destroy it
+      elements.delete(element)
+      observer.unobserve(element)
+    }
+
+    if (elements.size === 0) {
+      // No more elements are being observer by this instance, so destroy it
       observer.disconnect()
       observerMap.delete(id)
     }
