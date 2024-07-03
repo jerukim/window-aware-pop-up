@@ -1,9 +1,9 @@
 import { useCallback, useRef, useState } from 'react'
 import clsx from 'clsx'
 import { intersects } from '../lib/intersects'
-
-import type { Positions } from '../types'
 import { observe } from '../lib/observer'
+
+import type { Position, Positions } from '../types'
 
 interface PopupProps extends IntersectionObserverInit {
   anchorPositions?: Positions
@@ -18,6 +18,35 @@ interface PopupProps extends IntersectionObserverInit {
 // TODO: abstract anchor
 
 // todo: address scenario where repositioning doesn't happen when threshold is already passed and observer isn't triggered (onScroll or add additional thresholds)
+
+function getPortalStyles(anchorPosition: Position, offset: number) {
+  switch (anchorPosition) {
+    case 'bottom':
+      return {
+        top: '100%',
+        left: '50%',
+        transform: `translate(-50%, ${offset}px)`,
+      }
+    case 'top':
+      return {
+        top: `-${offset}px`,
+        left: '50%',
+        transform: `translate(-50%, -100%)`,
+      }
+    case 'right':
+      return {
+        top: '50%',
+        left: '100%',
+        transform: `translate(${offset}px, -50%)`,
+      }
+    case 'left':
+      return {
+        top: '50%%',
+        left: `-${offset}px`,
+        transform: `translate(-100%, -50%)`,
+      }
+  }
+}
 
 export function Popup({
   root,
@@ -89,30 +118,8 @@ export function Popup({
         // Portal
         <div
           ref={portalRef}
-          className={clsx(
-            'absolute opacity-50 transition-transform',
-            anchorPosition === 'bottom' && `top-full left-1/2`,
-            anchorPosition === 'left' &&
-              `top-1/2 -translate-x-full -translate-y-1/2`,
-            anchorPosition === 'top' &&
-              `left-1/2 -translate-x-1/2 -translate-y-full`,
-            anchorPosition === 'right' &&
-              `top-1/2 left-full translate-x-[${offset}px] -translate-y-1/2`
-          )}
-          style={{
-            ...(anchorPosition === 'bottom' && {
-              transform: `translate(-50%, ${offset}px)`,
-            }),
-            ...(anchorPosition === 'left' && {
-              left: `-${offset}px`,
-            }),
-            ...(anchorPosition === 'top' && {
-              top: `-${offset}px`,
-            }),
-            ...(anchorPosition === 'right' && {
-              transform: `translate(${offset}px, -50%)`,
-            }),
-          }}
+          className="absolute opacity-50 transition-transform"
+          style={getPortalStyles(anchorPosition, offset)}
         >
           <div className="relative">
             {/* Content */}
